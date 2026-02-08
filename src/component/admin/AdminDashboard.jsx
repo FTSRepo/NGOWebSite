@@ -13,7 +13,11 @@ import {
   DollarSign,
   MessageSquare,
   Mail,
+  Eye,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
+import VisitorCounter from "../../websitevisitorcount/VisitorCount";
 
 function AdminDashboard() {
   const [donations, setDonations] = useState([]);
@@ -22,10 +26,14 @@ function AdminDashboard() {
   const [subscribersLoading, setSubscribersLoading] = useState(true);
   const [enquiries, setEnquiries] = useState([]);
   const [enquiriesLoading, setEnquiriesLoading] = useState(true);
-  
+
   const [donationStats, setDonationStats] = useState({
     totalDonations: 0,
     totalAmount: 0,
+    confirmedAmount: 0, // NEW: Only confirmed payments
+    pendingAmount: 0, // NEW: Pending payments
+    confirmedCount: 0, // NEW: Count of confirmed
+    pendingCount: 0, // NEW: Count of pending
     thisMonth: 0,
     thisWeek: 0,
     today: 0,
@@ -63,7 +71,7 @@ function AdminDashboard() {
           headers: {
             accept: "*/*",
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -94,7 +102,7 @@ function AdminDashboard() {
           headers: {
             accept: "*/*",
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -125,7 +133,7 @@ function AdminDashboard() {
           headers: {
             accept: "*/*",
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -156,6 +164,10 @@ function AdminDashboard() {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     let totalAmount = 0;
+    let confirmedAmount = 0; // NEW: Only confirmed payments
+    let pendingAmount = 0; // NEW: Only pending payments
+    let confirmedCount = 0; // NEW
+    let pendingCount = 0; // NEW
     let thisMonthCount = 0;
     let thisWeekCount = 0;
     let todayCount = 0;
@@ -166,10 +178,20 @@ function AdminDashboard() {
       const donationDay = new Date(
         donationDate.getFullYear(),
         donationDate.getMonth(),
-        donationDate.getDate()
+        donationDate.getDate(),
       );
 
+      // Total amount (all donations)
       totalAmount += donation.amount;
+
+      // Separate confirmed and pending amounts
+      if (donation.isPaymentConfirmed) {
+        confirmedAmount += donation.amount;
+        confirmedCount++;
+      } else {
+        pendingAmount += donation.amount;
+        pendingCount++;
+      }
 
       if (donationDay >= monthStart) {
         thisMonthCount++;
@@ -188,6 +210,10 @@ function AdminDashboard() {
     setDonationStats({
       totalDonations: donationsData.length,
       totalAmount: totalAmount,
+      confirmedAmount: confirmedAmount, // NEW
+      pendingAmount: pendingAmount, // NEW
+      confirmedCount: confirmedCount, // NEW
+      pendingCount: pendingCount, // NEW
       thisMonth: thisMonthCount,
       thisWeek: thisWeekCount,
       today: todayCount,
@@ -211,7 +237,7 @@ function AdminDashboard() {
       const subDay = new Date(
         subDate.getFullYear(),
         subDate.getMonth(),
-        subDate.getDate()
+        subDate.getDate(),
       );
 
       if (subDay.getTime() === today.getTime()) {
@@ -250,7 +276,7 @@ function AdminDashboard() {
       const enquiryDay = new Date(
         enquiryDate.getFullYear(),
         enquiryDate.getMonth(),
-        enquiryDate.getDate()
+        enquiryDate.getDate(),
       );
 
       // Count by date
@@ -263,9 +289,9 @@ function AdminDashboard() {
 
       // Count by status
       const status = determineStatus(enquiry.visitDate);
-      if (status === 'pending') pendingCount++;
-      else if (status === 'in-progress') inProgressCount++;
-      else if (status === 'responded') respondedCount++;
+      if (status === "pending") pendingCount++;
+      else if (status === "in-progress") inProgressCount++;
+      else if (status === "responded") respondedCount++;
     });
 
     setEnquiryStats({
@@ -280,17 +306,17 @@ function AdminDashboard() {
 
   // Helper function to determine status based on visit date
   const determineStatus = (visitDate) => {
-    if (!visitDate) return 'pending';
+    if (!visitDate) return "pending";
     const visit = new Date(visitDate);
     const now = new Date();
     const diffDays = Math.floor((visit - now) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) return 'responded';
-    if (diffDays <= 2) return 'in-progress';
-    return 'pending';
+
+    if (diffDays < 0) return "responded";
+    if (diffDays <= 2) return "in-progress";
+    return "pending";
   };
 
-  // Get monthly donation data for chart (last 6 months)
+  // Get monthly donation data for chart (last 6 months) - UPDATED to only show confirmed
   const getMonthlyDonationData = () => {
     const monthlyData = {};
     const now = new Date();
@@ -299,7 +325,12 @@ function AdminDashboard() {
     for (let i = 5; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const key = date.toLocaleDateString("en-US", { month: "short" });
-      monthlyData[key] = { count: 0, amount: 0 };
+      monthlyData[key] = {
+        count: 0,
+        amount: 0,
+        confirmedCount: 0, // NEW
+        confirmedAmount: 0, // NEW
+      };
     }
 
     // Count donations per month
@@ -309,6 +340,12 @@ function AdminDashboard() {
       if (monthlyData[monthKey]) {
         monthlyData[monthKey].count++;
         monthlyData[monthKey].amount += donation.amount;
+
+        // NEW: Track confirmed donations separately
+        if (donation.isPaymentConfirmed) {
+          monthlyData[monthKey].confirmedCount++;
+          monthlyData[monthKey].confirmedAmount += donation.amount;
+        }
       }
     });
 
@@ -316,17 +353,19 @@ function AdminDashboard() {
       month,
       count: data.count,
       amount: data.amount,
+      confirmedCount: data.confirmedCount,
+      confirmedAmount: data.confirmedAmount,
     }));
   };
 
   const monthlyData = getMonthlyDonationData();
-  const maxDonations = Math.max(...monthlyData.map((d) => d.count), 1);
+  const maxDonations = Math.max(...monthlyData.map((d) => d.confirmedCount), 1); // Use confirmed count
 
-  // Calculate growth percentage
+  // Calculate growth percentage - UPDATED to use confirmed amounts
   const calculateGrowth = () => {
     if (monthlyData.length < 2) return 0;
-    const current = monthlyData[monthlyData.length - 1].count;
-    const previous = monthlyData[monthlyData.length - 2].count;
+    const current = monthlyData[monthlyData.length - 1].confirmedCount;
+    const previous = monthlyData[monthlyData.length - 2].confirmedCount;
     if (previous === 0) return current > 0 ? 100 : 0;
     return Math.round(((current - previous) / previous) * 100);
   };
@@ -335,12 +374,17 @@ function AdminDashboard() {
 
   return (
     <div className="p-8 bg-gradient-to-br from-slate-50 to-blue-50/30 min-h-screen">
-      {/* Page Header */}
-      <div className="mb-8">
-        <h2 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-          Dashboard
-        </h2>
-        <p className="text-sm text-slate-500 mt-1">Welcome back, Admin</p>
+      {/* Page Header with Visitor Counter */}
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h2 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            Dashboard
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">Welcome back, Admin</p>
+        </div>
+
+        {/* Minimal Visitor Counter */}
+        <VisitorCounter />
       </div>
 
       {/* Stats Cards */}
@@ -365,95 +409,65 @@ function AdminDashboard() {
           change={
             donationsLoading
               ? "Loading..."
-              : `${donationStats.totalDonations} total donations`
+              : `${donationStats.confirmedCount} confirmed, ${donationStats.pendingCount} pending`
           }
           trend="up"
           icon={<Heart className="w-6 h-6" />}
           gradient="from-rose-500 to-pink-500"
           loading={donationsLoading}
         />
+
+        {/* UPDATED: Now shows only confirmed amount */}
         <StatCard
-          title="TOTAL DONATION AMOUNT"
+          title="CONFIRMED DONATIONS"
           value={
             donationsLoading
               ? "..."
-              : `₹${donationStats.totalAmount.toLocaleString()}`
+              : `₹${donationStats.confirmedAmount.toLocaleString()}`
           }
           change={
             donationsLoading
               ? "Loading..."
-              : `${donationStats.thisMonth} this month`
+              : `${donationStats.confirmedCount} payments confirmed`
           }
           trend="up"
-          icon={<DollarSign className="w-6 h-6" />}
+          icon={<CheckCircle className="w-6 h-6" />}
           gradient="from-green-500 to-emerald-500"
           loading={donationsLoading}
+          badge={
+            !donationsLoading && (
+              <div className="text-xs text-green-600 bg-green-50 px-2 py-1 rounded-md mt-1">
+                Received
+              </div>
+            )
+          }
         />
 
+        {/* NEW: Pending Donations Card */}
         <StatCard
           title="CONTACT REQUESTS"
           value={enquiriesLoading ? "..." : enquiryStats.total}
           change={
-            enquiriesLoading
-              ? "Loading..."
-              : `${enquiryStats.pending} pending`
+            enquiriesLoading ? "Loading..." : `${enquiryStats.pending} pending`
           }
           trend="neutral"
           icon={<MessageSquare className="w-6 h-6" />}
           gradient="from-purple-500 to-indigo-500"
           loading={enquiriesLoading}
         />
-
-        
       </div>
-
-      {/* Detailed Stats Cards */}
-      {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <DetailCard
-          title="Subscribers Today"
-          count={subscriberStats.today}
-          subtitle="New today"
-          loading={subscribersLoading}
-          gradient="from-blue-500 to-indigo-500"
-          icon={<Users className="w-5 h-5 text-white" />}
-        />
-        <DetailCard
-          title="Enquiries This Week"
-          count={enquiryStats.thisWeek}
-          subtitle="Last 7 days"
-          loading={enquiriesLoading}
-          gradient="from-purple-500 to-pink-500"
-          icon={<Mail className="w-5 h-5 text-white" />}
-        />
-        <DetailCard
-          title="Donations Today"
-          count={donationStats.today}
-          subtitle="Received today"
-          loading={donationsLoading}
-          gradient="from-orange-500 to-red-500"
-          icon={<Heart className="w-5 h-5 text-white" />}
-        />
-        <DetailCard
-          title="Pending Enquiries"
-          count={enquiryStats.pending}
-          subtitle="Needs attention"
-          loading={enquiriesLoading}
-          gradient="from-yellow-500 to-amber-500"
-          icon={<Clock className="w-5 h-5 text-white" />}
-        />
-      </div> */}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Donation Trends */}
+        {/* Donation Trends - UPDATED to show confirmed donations */}
         <div className="lg:col-span-2 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-slate-100">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-xl font-bold text-slate-800">
-                Donation Trends
+                Confirmed Donation Trends
               </h3>
               <p className="text-sm text-slate-500 mt-1">
-                Monthly Donations Analytics (Last 6 Months)
+                Monthly Confirmed Donations (Last 6 Months)
               </p>
             </div>
             <div
@@ -536,18 +550,18 @@ function AdminDashboard() {
                     x2="0%"
                     y2="100%"
                   >
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
                   </linearGradient>
                 </defs>
 
-                {/* Generate path from actual data */}
+                {/* Generate path from confirmed donations data */}
                 <polygon
                   fill="url(#areaGradient)"
                   points={`0,200 ${monthlyData
                     .map((d, i) => {
                       const x = (i / (monthlyData.length - 1)) * 600;
-                      const y = 180 - (d.count / maxDonations) * 150;
+                      const y = 180 - (d.confirmedCount / maxDonations) * 150;
                       return `${x},${y}`;
                     })
                     .join(" ")} 600,200`}
@@ -556,14 +570,14 @@ function AdminDashboard() {
                 {/* Line */}
                 <polyline
                   fill="none"
-                  stroke="#6366f1"
+                  stroke="#10b981"
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   points={monthlyData
                     .map((d, i) => {
                       const x = (i / (monthlyData.length - 1)) * 600;
-                      const y = 180 - (d.count / maxDonations) * 150;
+                      const y = 180 - (d.confirmedCount / maxDonations) * 150;
                       return `${x},${y}`;
                     })
                     .join(" ")}
@@ -572,7 +586,7 @@ function AdminDashboard() {
                 {/* Dots */}
                 {monthlyData.map((d, i) => {
                   const x = (i / (monthlyData.length - 1)) * 600;
-                  const y = 180 - (d.count / maxDonations) * 150;
+                  const y = 180 - (d.confirmedCount / maxDonations) * 150;
                   const isLast = i === monthlyData.length - 1;
                   return (
                     <g key={i}>
@@ -580,12 +594,12 @@ function AdminDashboard() {
                         cx={x}
                         cy={y}
                         r={isLast ? 6 : 5}
-                        fill="#6366f1"
+                        fill="#10b981"
                         stroke={isLast ? "#fff" : "none"}
                         strokeWidth={isLast ? 2 : 0}
                       />
                       {/* Tooltip on hover */}
-                      <title>{`${d.month}: ${d.count} donations (₹${d.amount.toLocaleString()})`}</title>
+                      <title>{`${d.month}: ${d.confirmedCount} confirmed (₹${d.confirmedAmount.toLocaleString()})`}</title>
                     </g>
                   );
                 })}
@@ -614,13 +628,15 @@ function AdminDashboard() {
           {/* Legend */}
           <div className="mt-4 flex items-center justify-center gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-indigo-500"></div>
-              <span className="text-sm text-slate-600">Donation Count</span>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+              <span className="text-sm text-slate-600">
+                Confirmed Donations
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Recent Activity Summary */}
+        {/* Recent Activity Summary - UPDATED */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-slate-100">
           <h3 className="text-xl font-bold text-slate-800 mb-4">
             Recent Activity
@@ -632,6 +648,7 @@ function AdminDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Latest Donation - Show if confirmed */}
               <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-slate-600">
@@ -641,11 +658,23 @@ function AdminDashboard() {
                 </div>
                 {donations.length > 0 ? (
                   <>
-                    <p className="text-2xl font-bold text-slate-800">
-                      ₹{donations[0].amount.toLocaleString()}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-2xl font-bold text-slate-800">
+                        ₹{donations[0].amount.toLocaleString()}
+                      </p>
+                      {donations[0].isPaymentConfirmed ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-orange-500" />
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500 mt-1">
                       by {donations[0].fullName}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {donations[0].isPaymentConfirmed
+                        ? "Confirmed"
+                        : "Pending"}
                     </p>
                   </>
                 ) : (
@@ -653,27 +682,41 @@ function AdminDashboard() {
                 )}
               </div>
 
-              <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+              {/* Payment Summary */}
+              <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-slate-600">
-                    Latest Enquiry
+                    Payment Summary
                   </span>
-                  <MessageSquare className="w-4 h-4 text-blue-500" />
+                  <DollarSign className="w-4 h-4 text-indigo-500" />
                 </div>
-                {enquiries.length > 0 ? (
-                  <>
-                    <p className="text-lg font-bold text-slate-800 truncate">
-                      {enquiries[0].fullName || 'New Contact'}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {new Date(enquiries[0].tranDate).toLocaleDateString()}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm text-slate-500">No enquiries yet</p>
-                )}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-600">Confirmed</span>
+                    <span className="text-sm font-bold text-green-600">
+                      ₹{donationStats.confirmedAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-slate-600">Pending</span>
+                    <span className="text-sm font-bold text-orange-600">
+                      ₹{donationStats.pendingAmount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="pt-2 border-t border-indigo-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-600 font-semibold">
+                        Total
+                      </span>
+                      <span className="text-sm font-bold text-slate-800">
+                        ₹{donationStats.totalAmount.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
+              {/* Enquiry Status */}
               <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-100">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-semibold text-slate-600">
@@ -710,8 +753,17 @@ function AdminDashboard() {
   );
 }
 
-// StatCard Component
-function StatCard({ title, value, change, trend, icon, gradient, loading }) {
+// StatCard Component - UPDATED to support badge
+function StatCard({
+  title,
+  value,
+  change,
+  trend,
+  icon,
+  gradient,
+  loading,
+  badge,
+}) {
   return (
     <div className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 border border-slate-100 hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
       <div className="flex items-start justify-between mb-4">
@@ -740,26 +792,7 @@ function StatCard({ title, value, change, trend, icon, gradient, loading }) {
         )}
       </div>
       <div className="text-sm text-slate-600 font-medium">{change}</div>
-    </div>
-  );
-}
-
-// Detail Card Component
-function DetailCard({ title, count, subtitle, loading, gradient, icon }) {
-  return (
-    <div className="group bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg p-6 border border-slate-100 hover:shadow-xl transition-all duration-300">
-      <div
-        className={`inline-flex p-2 bg-gradient-to-br ${gradient} rounded-lg mb-4 group-hover:scale-110 transition-transform duration-300`}
-      >
-        {icon}
-      </div>
-      <h3 className="text-sm font-semibold text-slate-600 mb-2">{title}</h3>
-      {loading ? (
-        <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
-      ) : (
-        <div className="text-4xl font-black text-slate-800 mb-1">{count}</div>
-      )}
-      <p className="text-xs text-slate-500">{subtitle}</p>
+      {badge && <div className="mt-2">{badge}</div>}
     </div>
   );
 }

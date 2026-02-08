@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Filter, Mail, Phone, MapPin, Calendar, User, MessageSquare, Clock, CheckCircle, XCircle, AlertCircle, Download, Eye, RefreshCw } from 'lucide-react'
+import { Search, Filter, Mail, Phone, MapPin, Calendar, User, MessageSquare, Clock, CheckCircle, XCircle, AlertCircle, Download, Eye, RefreshCw, Loader2 } from 'lucide-react'
 
 function Contact() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -8,6 +8,9 @@ function Contact() {
   const [enquiries, setEnquiries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [updatingIds, setUpdatingIds] = useState([]) // Track which enquiries are being updated
+  const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState({ type: '', message: '' })
 
   // Fetch enquiries from API
   const fetchEnquiries = async () => {
@@ -31,6 +34,7 @@ function Contact() {
         // Transform API data to match component structure
         const transformedData = result.data.map((item, index) => ({
           id: `ENQ${String(index + 1).padStart(3, '0')}`,
+          requestId: item.visitorId, // Use visitorId from API as requestId
           name: item.fullName || 'Unknown',
           email: item.emailId || 'N/A',
           phone: item.mobile || 'N/A',
@@ -39,13 +43,14 @@ function Contact() {
           message: item.message || 'No message provided',
           date: formatDate(item.visitDate || item.tranDate),
           time: formatTime(item.tranDate),
-          status: determineStatus(item.visitDate),
-          location: 'India', // Default location as API doesn't provide this
+          status: item.isCommunicated ? 'responded' : determineStatus(item.visitDate),
+          location: 'India',
           age: null,
           medicalCondition: null,
           relation: item.relation || null,
           visitDate: item.visitDate,
-          tranDate: item.tranDate
+          tranDate: item.tranDate,
+          isCommunicated: item.isCommunicated || false
         }))
         
         setEnquiries(transformedData)
@@ -56,6 +61,48 @@ function Contact() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Update contact status
+  const updateContactStatus = async (requestId, status) => {
+    setUpdatingIds(prev => [...prev, requestId])
+    
+    try {
+      const response = await fetch(
+        `https://fileupload.friensys.com/api/Common/updateContactStatus?requestId=${requestId}&status=${status}`,
+        {
+          method: 'POST',
+          headers: {
+            'accept': '*/*'
+          }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to update contact status')
+      }
+
+      // Show success message
+      showToastMessage('success', `Contact marked as ${status ? 'responded' : 'pending'} successfully!`)
+      
+      // Refresh the enquiries list
+      await fetchEnquiries()
+      
+    } catch (err) {
+      console.error('Error updating contact status:', err)
+      showToastMessage('error', 'Failed to update contact status. Please try again.')
+    } finally {
+      setUpdatingIds(prev => prev.filter(id => id !== requestId))
+    }
+  }
+
+  // Show toast notification
+  const showToastMessage = (type, message) => {
+    setToastMessage({ type, message })
+    setShowToast(true)
+    setTimeout(() => {
+      setShowToast(false)
+    }, 3000)
   }
 
   // Helper function to determine enquiry type
@@ -162,9 +209,10 @@ function Contact() {
 
   // Export to CSV
   const handleExport = () => {
-    const headers = ['ID', 'Name', 'Email', 'Phone', 'Type', 'Subject', 'Message', 'Date', 'Time', 'Status', 'Relation', 'Visit Date']
+    const headers = ['ID', 'Visitor ID', 'Name', 'Email', 'Phone', 'Type', 'Subject', 'Message', 'Date', 'Time', 'Status', 'Relation', 'Visit Date']
     const csvData = filteredEnquiries.map(e => [
       e.id,
+      e.requestId,
       e.name,
       e.email,
       e.phone,
@@ -224,6 +272,24 @@ function Contact() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-4 right-4 z-50 animate-slide-in">
+          <div className={`flex items-center gap-3 px-6 py-4 rounded-lg shadow-lg ${
+            toastMessage.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            {toastMessage.type === 'success' ? (
+              <CheckCircle className="w-5 h-5" />
+            ) : (
+              <XCircle className="w-5 h-5" />
+            )}
+            <span className="font-medium">{toastMessage.message}</span>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
@@ -338,89 +404,129 @@ function Contact() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredEnquiries.map((enquiry) => (
-              <div key={enquiry.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
-                <div className="p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                    {/* Left Section - Main Info */}
-                    <div className="flex-1">
-                      <div className="flex items-start gap-4">
-                        {/* Avatar */}
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                          {enquiry.name.charAt(0).toUpperCase()}
-                        </div>
-
-                        {/* Details */}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="text-lg font-semibold text-gray-900">{enquiry.name}</h3>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${getTypeColor(enquiry.type)}`}>
-                              {enquiry.type}
-                            </span>
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(enquiry.status)}`}>
-                              {getStatusIcon(enquiry.status)}
-                              {enquiry.status.charAt(0).toUpperCase() + enquiry.status.slice(1).replace('-', ' ')}
-                            </span>
+            {filteredEnquiries.map((enquiry) => {
+              const isUpdating = updatingIds.includes(enquiry.requestId)
+              
+              return (
+                <div key={enquiry.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="p-6">
+                    <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                      {/* Left Section - Main Info */}
+                      <div className="flex-1">
+                        <div className="flex items-start gap-4">
+                          {/* Avatar */}
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                            {enquiry.name.charAt(0).toUpperCase()}
                           </div>
 
-                          <p className="text-sm font-medium text-gray-700 mb-3">{enquiry.subject}</p>
+                          {/* Details */}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
+                              <h3 className="text-lg font-semibold text-gray-900">{enquiry.name}</h3>
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${getTypeColor(enquiry.type)}`}>
+                                {enquiry.type}
+                              </span>
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(enquiry.status)}`}>
+                                {getStatusIcon(enquiry.status)}
+                                {enquiry.status.charAt(0).toUpperCase() + enquiry.status.slice(1).replace('-', ' ')}
+                              </span>
+                            </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Mail className="w-4 h-4 text-gray-400" />
-                              {enquiry.email}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Phone className="w-4 h-4 text-gray-400" />
-                              {enquiry.phone}
-                            </div>
-                            {enquiry.relation && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <User className="w-4 h-4 text-gray-400" />
-                                Relation: {enquiry.relation}
-                              </div>
-                            )}
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                              <Calendar className="w-4 h-4 text-gray-400" />
-                              {enquiry.date} at {enquiry.time}
-                            </div>
-                            {enquiry.visitDate && (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Calendar className="w-4 h-4 text-green-400" />
-                                Visit: {formatDate(enquiry.visitDate)}
-                              </div>
-                            )}
-                          </div>
+                            <p className="text-sm font-medium text-gray-700 mb-3">{enquiry.subject}</p>
 
-                          <div className="bg-gray-50 rounded-lg p-4 mb-3">
-                            <p className="text-sm text-gray-700 leading-relaxed">{enquiry.message}</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Mail className="w-4 h-4 text-gray-400" />
+                                {enquiry.email}
+                              </div>
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Phone className="w-4 h-4 text-gray-400" />
+                                {enquiry.phone}
+                              </div>
+                              {enquiry.relation && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <User className="w-4 h-4 text-gray-400" />
+                                  Relation: {enquiry.relation}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Calendar className="w-4 h-4 text-gray-400" />
+                                {enquiry.date} at {enquiry.time}
+                              </div>
+                              {enquiry.visitDate && (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Calendar className="w-4 h-4 text-green-400" />
+                                  Visit: {formatDate(enquiry.visitDate)}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="bg-gray-50 rounded-lg p-4 mb-3">
+                              <p className="text-sm text-gray-700 leading-relaxed">{enquiry.message}</p>
+                            </div>
                           </div>
                         </div>
                       </div>
+
+                      {/* Right Section - Actions */}
+                      <div className="flex lg:flex-col gap-2 flex-shrink-0">
+                        {enquiry.status !== 'responded' && (
+                          <button
+                            onClick={() => updateContactStatus(enquiry.requestId, true)}
+                            disabled={isUpdating}
+                            className={`px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center gap-2 ${
+                              isUpdating ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            {isUpdating ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Updating...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-4 h-4" />
+                                Mark as Responded
+                              </>
+                            )}
+                          </button>
+                        )}
+                        
+                        {enquiry.status === 'responded' && (
+                          <button
+                            onClick={() => updateContactStatus(enquiry.requestId, false)}
+                            disabled={isUpdating}
+                            className={`px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium flex items-center gap-2 ${
+                              isUpdating ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                          >
+                            {isUpdating ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Updating...
+                              </>
+                            ) : (
+                              <>
+                                <Clock className="w-4 h-4" />
+                                Mark as Pending
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Right Section - Actions */}
-                    <div className="flex lg:flex-col gap-2 flex-shrink-0">
-                      {enquiry.status === 'pending' && (
-                        <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium">
-                          Respond
-                        </button>
-                      )}
-                      {enquiry.status === 'in-progress' && (
-                        <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium">
-                          Update
-                        </button>
-                      )}
+                    {/* ID Footer */}
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500 font-mono">Display ID: {enquiry.id}</span>
+                        <span className="text-xs text-gray-500 font-mono">Visitor ID: {enquiry.requestId}</span>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* ID Footer */}
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <span className="text-xs text-gray-500 font-mono">ID: {enquiry.id}</span>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -446,6 +552,23 @@ function Contact() {
           </div>
         )}
       </div>
+
+      <style jsx>{`
+        @keyframes slide-in {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out;
+        }
+      `}</style>
     </div>
   )
 }

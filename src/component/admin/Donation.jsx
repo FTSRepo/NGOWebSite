@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Search, Download, Filter, TrendingUp, DollarSign, Users, Heart, Calendar, Gift, Phone, Mail, Loader2 } from 'lucide-react'
+import { Search, Download, Filter, TrendingUp, DollarSign, Users, Heart, Calendar, Gift, Phone, Mail, Loader2, CheckCircle, XCircle } from 'lucide-react'
 
 function Donation() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -7,6 +7,7 @@ function Donation() {
   const [donations, setDonations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [updatingStatus, setUpdatingStatus] = useState({})
 
   // Fetch donations from API
   useEffect(() => {
@@ -35,6 +36,7 @@ function Donation() {
         // Transform API data to match the component's expected format
         const transformedData = result.data.map((donation, index) => ({
           id: `DON${String(index + 1).padStart(3, '0')}`,
+          donationId: donation.donationId, // Store actual donation ID from API
           donorName: donation.fullName,
           email: donation.emailId,
           phone: donation.mobile,
@@ -47,7 +49,8 @@ function Donation() {
           panCard: 'N/A',
           donationType: donation.donationType,
           cause: donation.cause,
-          webSiteId: donation.webSiteId
+          webSiteId: donation.webSiteId,
+          isPaymentConfirmed: donation.isPaymentConfirmed // Payment confirmation status
         }))
         
         setDonations(transformedData)
@@ -62,12 +65,55 @@ function Donation() {
     }
   }
 
+  // Update payment status using the API
+  const updatePaymentStatus = async (donation, newStatus) => {
+    try {
+      setUpdatingStatus(prev => ({ ...prev, [donation.donationId]: true }))
+      
+      const response = await fetch(
+        `https://fileupload.friensys.com/api/Common/updateDonationStatus?webSiteId=${donation.webSiteId}&donnerId=${donation.donationId}&status=${newStatus}`,
+        {
+          method: 'POST',
+          headers: {
+            'accept': '*/*'
+          }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Failed to update payment status')
+      }
+
+      // Update local state after successful API call
+      setDonations(prevDonations =>
+        prevDonations.map(d =>
+          d.donationId === donation.donationId
+            ? { ...d, isPaymentConfirmed: newStatus }
+            : d
+        )
+      )
+
+      // Success notification
+      console.log(`Payment status updated successfully to ${newStatus ? 'Confirmed' : 'Pending'}`)
+      
+    } catch (err) {
+      console.error('Error updating payment status:', err)
+      alert('Failed to update payment status: ' + err.message)
+    } finally {
+      setUpdatingStatus(prev => ({ ...prev, [donation.donationId]: false }))
+    }
+  }
+
   // Calculate statistics
   const stats = {
-    totalReceived: donations.reduce((sum, d) => sum + d.amount, 0),
+    totalReceived: donations
+    .filter(d => d.isPaymentConfirmed)
+    .reduce((sum, d) => sum + d.amount, 0),
     totalDonors: donations.length,
     thisMonth: donations.filter(d => new Date(d.date).getMonth() === new Date().getMonth()).reduce((sum, d) => sum + d.amount, 0),
-    categories: [...new Set(donations.map(d => d.category))].length
+    categories: [...new Set(donations.map(d => d.category))].length,
+    paymentsConfirmed: donations.filter(d => d.isPaymentConfirmed).length,
+    paymentsPending: donations.filter(d => !d.isPaymentConfirmed).length
   }
 
   // Filter donations
@@ -89,7 +135,10 @@ function Donation() {
       'Healthcare': 'bg-purple-100 text-purple-800',
       'General': 'bg-gray-100 text-gray-800',
       'Recreation': 'bg-yellow-100 text-yellow-800',
-      'Education': 'bg-indigo-100 text-indigo-800'
+      'Education': 'bg-indigo-100 text-indigo-800',
+      'Singh': 'bg-teal-100 text-teal-800',
+      'Fever': 'bg-pink-100 text-pink-800',
+      'string': 'bg-gray-100 text-gray-800'
     }
     return colors[category] || 'bg-gray-100 text-gray-800'
   }
@@ -157,12 +206,12 @@ function Donation() {
               <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg p-6 text-white">
                 <div className="flex items-center justify-between mb-4">
                   <div className="p-3 bg-white/20 rounded-lg">
-                    <Calendar className="w-6 h-6" />
+                    <CheckCircle className="w-6 h-6" />
                   </div>
                   <TrendingUp className="w-5 h-5 opacity-80" />
                 </div>
-                <h3 className="text-2xl font-bold">₹{stats.thisMonth.toLocaleString()}</h3>
-                <p className="text-green-100 text-sm mt-1">This Month</p>
+                <h3 className="text-2xl font-bold">{stats.paymentsConfirmed}</h3>
+                <p className="text-green-100 text-sm mt-1">Payments Confirmed</p>
               </div>
 
               <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg p-6 text-white">
@@ -178,11 +227,11 @@ function Donation() {
               <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
                 <div className="flex items-center justify-between mb-4">
                   <div className="p-3 bg-white/20 rounded-lg">
-                    <Gift className="w-6 h-6" />
+                    <XCircle className="w-6 h-6" />
                   </div>
                 </div>
-                <h3 className="text-2xl font-bold">{stats.categories}</h3>
-                <p className="text-orange-100 text-sm mt-1">Donation Categories</p>
+                <h3 className="text-2xl font-bold">{stats.paymentsPending}</h3>
+                <p className="text-orange-100 text-sm mt-1">Payments Pending</p>
               </div>
             </div>
 
@@ -256,10 +305,7 @@ function Donation() {
                         Date
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Donation Type
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                        Actions
+                        Payment Status
                       </th>
                     </tr>
                   </thead>
@@ -288,13 +334,13 @@ function Donation() {
                               </div>
                               <div>
                                 <div className="text-sm font-medium text-gray-900">{donation.donorName}</div>
-                                {donation.email !== 'N/A' && (
+                                {donation.email !== 'N/A' && donation.email !== 'string' && (
                                   <div className="text-xs text-gray-500 flex items-center gap-1">
                                     <Mail className="w-3 h-3" />
                                     {donation.email}
                                   </div>
                                 )}
-                                {donation.phone !== 'N/A' && (
+                                {donation.phone !== 'N/A' && donation.phone !== 'string' && (
                                   <div className="text-xs text-gray-500 flex items-center gap-1">
                                     <Phone className="w-3 h-3" />
                                     {donation.phone}
@@ -318,14 +364,28 @@ function Donation() {
                             <div className="text-sm text-gray-900">{donation.date}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{donation.donationType}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <button className="text-blue-600 hover:text-blue-800 font-medium mr-3 hover:underline">
-                              View Details
-                            </button>
-                            <button className="text-green-600 hover:text-green-800 font-medium hover:underline">
-                              Receipt
+                            <button
+                              onClick={() => updatePaymentStatus(donation, !donation.isPaymentConfirmed)}
+                              disabled={updatingStatus[donation.donationId]}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                donation.isPaymentConfirmed
+                                  ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                  : 'bg-orange-100 text-orange-800 hover:bg-orange-200'
+                              } ${updatingStatus[donation.donationId] ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {updatingStatus[donation.donationId] ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : donation.isPaymentConfirmed ? (
+                                <CheckCircle className="w-3.5 h-3.5" />
+                              ) : (
+                                <XCircle className="w-3.5 h-3.5" />
+                              )}
+                              {updatingStatus[donation.donationId] 
+                                ? 'Updating...' 
+                                : donation.isPaymentConfirmed 
+                                  ? 'Confirmed' 
+                                  : 'Pending'
+                              }
                             </button>
                           </td>
                         </tr>
@@ -351,17 +411,6 @@ function Donation() {
                     Next
                   </button>
                 </div>
-              </div>
-            </div>
-
-            {/* Quick Stats Footer */}
-            <div className="mt-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg p-6 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-bold mb-1">Thank you to all our donors!</h3>
-                  <p className="text-blue-100">Your generosity helps us care for our elderly residents with dignity and compassion.</p>
-                </div>
-                <Heart className="w-16 h-16 opacity-20" fill="currentColor" />
               </div>
             </div>
           </>
