@@ -31,7 +31,7 @@ function ImageUpload() {
   // Page configuration with pageId and titleId
   const pages = [
     { name: 'Gallery', pageId: 2, titleId: 2 },
-    { name: 'Event', pageId: 3, titleId: 3 },
+    // { name: 'Event', pageId: 3, titleId: 3 },
   ];
 
   // Fetch images on component mount
