@@ -52,7 +52,7 @@ function HomePage() {
   const [scrollY, setScrollY] = useState(0);
   const [donations, setDonations] = useState([]);
   const [donationsLoading, setDonationsLoading] = useState(true);
-  const [activeCard, setActiveCard] = useState(0);
+  const [activeDonation, setActiveDonation] = useState(0);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -81,8 +81,8 @@ function HomePage() {
   useEffect(() => {
     if (donations.length > 0) {
       const interval = setInterval(() => {
-        setActiveCard((prev) => (prev + 1) % Math.min(donations.length, 6));
-      }, 3500);
+        setActiveDonation((prev) => (prev + 1) % donations.length);
+      }, 4000);
       return () => clearInterval(interval);
     }
   }, [donations]);
@@ -108,7 +108,7 @@ function HomePage() {
 
       if (result.status && result.data) {
         const latestDonations = result.data
-          .slice(0, 6)
+          .slice(0, 10)
           .map((donation, index) => ({
             id: `DON${String(index + 1).padStart(3, "0")}`,
             donorName: donation.fullName,
@@ -127,15 +127,6 @@ function HomePage() {
       setDonationsLoading(false);
     }
   };
-
-  // Calculate donation statistics
-  // const donationStats = {
-  //   totalReceived: donations.reduce((sum, d) => sum + d.amount, 0),
-  //   totalDonors: donations.length,
-  //   thisMonth: donations
-  //     .filter((d) => new Date(d.date).getMonth() === new Date().getMonth())
-  //     .reduce((sum, d) => sum + d.amount, 0),
-  // };
 
   const testimonials = [
     {
@@ -318,6 +309,16 @@ function HomePage() {
 
   const prevEvent = () => {
     setActiveEvent((prev) => (prev - 1 + events.length) % events.length);
+  };
+
+  const nextDonation = () => {
+    setActiveDonation((prev) => (prev + 1) % donations.length);
+  };
+
+  const prevDonation = () => {
+    setActiveDonation(
+      (prev) => (prev - 1 + donations.length) % donations.length,
+    );
   };
 
   const donationStats = {
@@ -575,7 +576,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Recent Donations Section */}
+      {/* Recent Donations Section - SLIDER VIEW */}
       <section className="py-20 bg-gradient-to-br from-gray-50 via-white to-orange-50/20 relative overflow-hidden">
         {/* Background Decorations */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -697,7 +698,7 @@ function HomePage() {
             </div>
           )}
 
-          {/* Donations Display */}
+          {/* Donations Slider */}
           {donationsLoading ? (
             <div className="flex items-center justify-center py-32">
               <div className="text-center">
@@ -723,123 +724,156 @@ function HomePage() {
               </p>
             </div>
           ) : (
-            <>
-              {/* Featured Donation Cards Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
-                {donations.slice(0, 6).map((donation, index) => {
-                  const isActive = index === activeCard;
-
-                  return (
-                    <div
-                      key={donation.id}
-                      className={`group relative bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden border-2 ${
-                        isActive
-                          ? "border-orange-500 scale-105 shadow-orange-200"
-                          : "border-gray-100 hover:border-orange-300"
-                      }`}
-                      onMouseEnter={() => setActiveCard(index)}
-                    >
-                      {/* Animated Background */}
+            <div className="relative w-full">
+              {/* Image Card Style Slider Container */}
+              <div className="relative mx-auto" style={{ maxWidth: '90%', height: '450px' }}>
+                <div className="flex items-center justify-center gap-4 h-full perspective-1000">
+                  {/* Display 5 cards with center focus */}
+                  {[-2, -1, 0, 1, 2].map((offset) => {
+                    const index = (activeDonation + offset + donations.length) % donations.length;
+                    const donation = donations[index];
+                    const isActive = offset === 0;
+                    
+                    return (
                       <div
-                        className={`absolute inset-0 bg-gradient-to-br ${getCategoryGradient(donation.cause)} opacity-0 group-hover:opacity-5 transition-opacity duration-500`}
-                      ></div>
-
-                      {/* Active Indicator */}
-                      {isActive && (
-                        <div className="absolute top-4 right-4 z-10">
-                          <div className="relative">
-                            <Heart
-                              className="w-7 h-7 text-red-500 animate-pulse"
-                              fill="currentColor"
-                            />
-                            <div className="absolute inset-0 blur-lg bg-red-400/50 animate-ping"></div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="relative p-8">
-                        {/* Category Badge */}
-                        <div className="mb-6">
-                          <span
-                            className={`inline-block px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r ${getCategoryGradient(donation.cause)} text-white shadow-lg uppercase tracking-wide`}
-                          >
-                            {donation.cause}
-                          </span>
-                        </div>
-
-                        {/* Donor Info */}
-                        <div className="flex items-center gap-4 mb-6">
-                          <div
-                            className={`relative w-16 h-16 rounded-2xl bg-gradient-to-br ${getCategoryGradient(donation.cause)} flex items-center justify-center text-white font-black text-2xl shadow-xl group-hover:scale-110 transition-transform duration-300`}
-                          >
-                            {donation.donorName.charAt(0).toUpperCase()}
-                            <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-gray-900 text-xl truncate group-hover:text-orange-600 transition-colors">
-                              {donation.donorName}
-                            </h3>
-                            <div className="flex items-center gap-2 text-sm text-gray-500">
-                              <Calendar className="w-3.5 h-3.5" />
-                              <span>{formatDate(donation.date)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Amount Display */}
-                        <div className="mb-6 p-6 bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-2xl border border-gray-200/50">
-                          <div className="flex items-baseline justify-between">
+                        key={index}
+                        onClick={() => setActiveDonation(index)}
+                        className={`relative transition-all duration-500 ease-in-out cursor-pointer ${
+                          isActive
+                            ? 'w-72 h-96 z-30 scale-100'
+                            : Math.abs(offset) === 1
+                            ? 'w-56 h-80 z-20 scale-90 opacity-60'
+                            : 'w-48 h-72 z-10 scale-75 opacity-30'
+                        }`}
+                        style={{
+                          transform: `translateX(${offset * (isActive ? 0 : offset > 0 ? 20 : -20)}px) rotateY(${offset * 8}deg)`,
+                        }}
+                      >
+                        {/* Card */}
+                        <div
+                          className={`relative w-full h-full rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br ${getCategoryGradient(donation.cause)} transition-all duration-500`}
+                        >
+                          {/* Card Content */}
+                          <div className="relative w-full h-full p-6 flex flex-col justify-between">
+                            {/* Top Section */}
                             <div>
-                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Contribution
-                              </p>
-                              <h4 className="text-5xl font-black bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-                                ₹{donation.amount.toLocaleString()}
-                              </h4>
-                            </div>
-                            <CheckCircle className="w-8 h-8 text-green-500" />
-                          </div>
-                        </div>
+                              {/* Category Badge */}
+                              <div className="mb-4">
+                                <span className="inline-block px-4 py-2 rounded-lg text-xs font-bold bg-white/20 backdrop-blur-sm text-white shadow-lg uppercase tracking-wide">
+                                  {donation.cause}
+                                </span>
+                              </div>
 
-                        {/* Donation Type */}
-                        <div className="flex items-center justify-between pt-6 border-t border-gray-200">
-                          <div>
-                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                              Type
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {donation.donationType}
-                            </p>
+                              {/* Donor Avatar & Name */}
+                              <div className="flex items-center gap-3 mb-4">
+                                <div className="w-12 h-12 rounded-full bg-white/30 backdrop-blur-sm flex items-center justify-center text-white font-black text-xl shadow-lg border-2 border-white/40">
+                                  {donation.donorName.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1">
+                                  <h3 className="font-bold text-white text-lg line-clamp-1">
+                                    {donation.donorName}
+                                  </h3>
+                                  <div className="flex items-center gap-1 text-white/80 text-xs">
+                                    <Calendar className="w-3 h-3" />
+                                    <span>{formatDate(donation.date)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Middle Section - Amount */}
+                            <div className="flex-1 flex items-center justify-center">
+                              <div className="text-center">
+                                <p className="text-white/80 text-sm font-semibold uppercase tracking-wide mb-2">
+                                  Contribution
+                                </p>
+                                <h4 className="text-5xl font-black text-white mb-2">
+                                  ₹{donation.amount.toLocaleString()}
+                                </h4>
+                                <div className="flex items-center justify-center gap-2">
+                                  <CheckCircle className="w-5 h-5 text-white" />
+                                  <span className="text-white/90 text-sm font-semibold">
+                                    Verified
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Section */}
+                            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+                              <p className="text-white/70 text-xs font-semibold uppercase tracking-wide mb-1">
+                                Type
+                              </p>
+                              <p className="text-white font-bold text-sm">
+                                {donation.donationType}
+                              </p>
+                            </div>
+
+                            {/* Heart Icon */}
+                            {isActive && (
+                              <div className="absolute top-4 right-4">
+                                <Heart
+                                  className="w-8 h-8 text-white animate-pulse"
+                                  fill="currentColor"
+                                />
+                              </div>
+                            )}
                           </div>
-                          <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center group-hover:bg-orange-200 transition-colors">
-                            <ArrowRight className="w-5 h-5 text-orange-600 group-hover:translate-x-1 transition-transform" />
-                          </div>
+
+                          {/* Overlay gradient */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none"></div>
                         </div>
                       </div>
-
-                      {/* Hover Effect Border */}
-                      <div className="absolute inset-0 rounded-3xl border-2 border-transparent group-hover:border-orange-400/50 transition-all duration-300 pointer-events-none"></div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Progress Indicators */}
-              <div className="flex items-center justify-center gap-2">
-                {donations.slice(0, 6).map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setActiveCard(index)}
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      index === activeCard
-                        ? "w-12 bg-gradient-to-r from-orange-500 to-red-500"
-                        : "w-2 bg-gray-300 hover:bg-gray-400"
-                    }`}
-                    aria-label={`View donation ${index + 1}`}
-                  />
-                ))}
+              {/* Navigation Controls */}
+              <div className="flex items-center justify-center mt-8 gap-6">
+                <button
+                  onClick={prevDonation}
+                  className="w-14 h-14 rounded-full bg-white hover:bg-gradient-to-r hover:from-orange-500 hover:to-red-600 hover:text-white text-gray-700 flex items-center justify-center transition-all transform hover:scale-110 shadow-xl border border-gray-200"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+
+                <div className="flex gap-2">
+                  {donations.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => setActiveDonation(index)}
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        index === activeDonation
+                          ? "w-12 bg-gradient-to-r from-orange-500 to-red-600"
+                          : "w-2 bg-gray-300 hover:bg-orange-400"
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  onClick={nextDonation}
+                  className="w-14 h-14 rounded-full bg-white hover:bg-gradient-to-r hover:from-orange-500 hover:to-red-600 hover:text-white text-gray-700 flex items-center justify-center transition-all transform hover:scale-110 shadow-xl border border-gray-200"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
               </div>
-            </>
+
+              {/* Donation Counter */}
+              <div className="text-center mt-6">
+                <p className="text-gray-600 font-semibold text-lg">
+                  <span className="text-orange-600 font-black">
+                    {activeDonation + 1}
+                  </span>
+                  {" / "}
+                  <span className="text-gray-800 font-black">
+                    {donations.length}
+                  </span>
+                  {" "}generous donations
+                </p>
+              </div>
+            </div>
           )}
         </div>
       </section>
@@ -1231,6 +1265,10 @@ function HomePage() {
 
         .animation-delay-800 {
           animation-delay: 800ms;
+        }
+
+        .perspective-1000 {
+          perspective: 1000px;
         }
       `}</style>
     </div>
