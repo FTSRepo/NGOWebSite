@@ -23,6 +23,8 @@ import ImageUpload from "../component/admin/ImageUpload";
 import AdminContact from "../component/admin/Contact";
 import Subscribers from "../component/admin/Subscribers";
 import Donation from "../component/admin/Donation";
+import UpiManager from "../component/admin/payments/UpiManager";
+import ChangePassword from "../component/admin/auth/ChangePassword";
 
 import DashboardLayout from "../sidebar/DashboardLayout";
 
@@ -78,6 +80,8 @@ const router = createBrowserRouter(
         <Route path="donation" element={<Donation />} />
         <Route path="contact" element={<AdminContact />} />
         <Route path="subscribers" element={<Subscribers />} />
+        <Route path="upi-manager" element={<UpiManager />} />
+        <Route path="change-password" element={<ChangePassword />} />
       </Route>
 
       {/* 404 - Catch all route */}

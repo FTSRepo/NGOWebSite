@@ -14,6 +14,8 @@ import {
   User,
   Settings,
   ChevronDown,
+  IndianRupee,
+  LockKeyhole,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
@@ -123,6 +125,16 @@ function DashboardLayout() {
               icon={<Upload size={20} />}
               label="Media Manager"
               to="image-upload"
+            />
+            <NavItem
+              icon={<IndianRupee  size={20} />}
+              label="Configure UPI"
+              to="upi-manager"
+            />
+            <NavItem
+              icon={<LockKeyhole  size={20} />}
+              label="Change Password"
+              to="change-password"
             />
           </nav>
         </div>
