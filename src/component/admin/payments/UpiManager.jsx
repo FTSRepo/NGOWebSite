@@ -6,7 +6,6 @@ function UpiManager() {
     upI_Id: '',
     upI_Number: ''
   })
-  const [editingId, setEditingId] = useState(null)
   const [errors, setErrors] = useState({})
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -88,7 +87,7 @@ function UpiManager() {
     return Object.keys(newErrors).length === 0
   }
 
-  // Add or Update UPI
+  // Add UPI (Create only - no editing)
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -99,13 +98,14 @@ function UpiManager() {
     setSuccessMessage('')
 
     try {
+      // Always use paymentSetupId: 0 for creating new entries
       const payload = {
-        paymentSetupId: editingId || 0,
+        paymentSetupId: 0,
         webSiteId: WEBSITE_ID,
         upI_Id: formData.upI_Id,
         upI_Number: formData.upI_Number,
         tranDate: new Date().toISOString(),
-        isActive: upiList.length === 0 || editingId !== null ? true : false
+        isActive: false  // New UPIs are created as inactive
       }
 
       const response = await fetch(`${API_BASE_URL}/create-payment-setup`, {
@@ -120,11 +120,10 @@ function UpiManager() {
       if (response.ok) {
         const result = await response.json()
         if (result.status) {
-          setSuccessMessage(result.message || 'UPI saved successfully')
+          setSuccessMessage('UPI added successfully')
           setFormData({ upI_Id: '', upI_Number: '' })
           setErrors({})
           setShowForm(false)
-          setEditingId(null)
           
           // Refresh the list
           await fetchUpiList()
@@ -132,28 +131,29 @@ function UpiManager() {
           // Hide success message after 3 seconds
           setTimeout(() => setSuccessMessage(''), 3000)
         } else {
-          setApiError(result.message || 'Failed to save UPI')
+          setApiError(result.message || 'Failed to add UPI')
         }
       } else {
-        setApiError('Failed to save UPI. Please try again.')
+        setApiError('Failed to add UPI. Please try again.')
       }
     } catch (error) {
-      console.error('Error saving UPI:', error)
+      console.error('Error adding UPI:', error)
       setApiError('Network error. Please check your connection.')
     } finally {
       setLoading(false)
     }
   }
 
-  // Toggle active UPI - FIXED VERSION
+  // Toggle active UPI - CORRECTED VERSION
   const handleToggleActive = async (paymentSetupId, currentStatus) => {
     setLoading(true)
     setApiError('')
+    setSuccessMessage('')
 
     try {
       if (currentStatus) {
-        // If currently active, deactivate it
-        const deactivateResponse = await fetch(
+        // If currently active, just deactivate it
+        const response = await fetch(
           `${API_BASE_URL}/update-payment-setup?webSitId=${paymentSetupId}&status=false`, 
           {
             method: 'POST',
@@ -164,7 +164,7 @@ function UpiManager() {
           }
         )
 
-        if (deactivateResponse.ok) {
+        if (response.ok) {
           await fetchUpiList()
           setSuccessMessage('UPI deactivated successfully')
           setTimeout(() => setSuccessMessage(''), 3000)
@@ -172,9 +172,9 @@ function UpiManager() {
           setApiError('Failed to deactivate UPI')
         }
       } else {
-        // If currently inactive, first deactivate all UPIs, then activate this one
+        // If currently inactive, activate this one and deactivate all others
         
-        // Step 1: Deactivate all UPIs
+        // Step 1: Deactivate ALL UPIs for this website
         const deactivateAllResponse = await fetch(
           `${API_BASE_URL}/update-payment-setup?webSitId=${WEBSITE_ID}&status=false`, 
           {
@@ -218,32 +218,8 @@ function UpiManager() {
     }
   }
 
-  // Edit UPI
-  const handleEdit = (upi) => {
-    setFormData({
-      upI_Id: upi.upI_Id,
-      upI_Number: upi.upI_Number
-    })
-    setEditingId(upi.paymentSetupId)
-    setErrors({})
-    setApiError('')
-    setSuccessMessage('')
-    setShowForm(true)
-  }
-
-  // Delete UPI (Note: There's no delete API, so we'll just remove from local state)
-  const handleDelete = (paymentSetupId) => {
-    // Since there's no delete API endpoint shown, we'll need to handle this differently
-    // For now, we'll just filter it out locally and show a message
-    setApiError('Delete functionality requires API endpoint')
-    
-    // Uncomment below if delete API is available
-    // setUpiList(prev => prev.filter(upi => upi.paymentSetupId !== paymentSetupId))
-  }
-
-  // Cancel edit
-  const handleCancelEdit = () => {
-    setEditingId(null)
+  // Cancel form
+  const handleCancelForm = () => {
     setFormData({ upI_Id: '', upI_Number: '' })
     setErrors({})
     setApiError('')
@@ -309,15 +285,13 @@ function UpiManager() {
           </div>
         )}
 
-        {/* Add/Edit Form Modal */}
+        {/* Add Form Modal */}
         {showForm && (
           <div className="bg-gray-800 rounded-2xl shadow-2xl p-8 mb-8 border border-gray-700">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">
-                {editingId ? 'Edit UPI Account' : 'Add New UPI Account'}
-              </h2>
+              <h2 className="text-2xl font-bold text-white">Add New UPI Account</h2>
               <button
-                onClick={handleCancelEdit}
+                onClick={handleCancelForm}
                 className="text-gray-400 hover:text-white transition"
                 disabled={loading}
               >
@@ -392,16 +366,16 @@ function UpiManager() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Saving...
+                      Adding...
                     </>
                   ) : (
-                    editingId ? 'Update Account' : 'Add Account'
+                    'Add Account'
                   )}
                 </button>
                 
                 <button
                   type="button"
-                  onClick={handleCancelEdit}
+                  onClick={handleCancelForm}
                   disabled={loading}
                   className="px-6 py-3 bg-gray-700 text-gray-300 rounded-xl font-semibold hover:bg-gray-600 transition disabled:opacity-50"
                 >
@@ -456,13 +430,10 @@ function UpiManager() {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
                       Last Updated
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700">
-                  {upiList.map((upi, index) => (
+                  {upiList.map((upi) => (
                     <tr 
                       key={upi.paymentSetupId}
                       className={`transition-colors ${
@@ -482,7 +453,7 @@ function UpiManager() {
                                 ? 'bg-green-500' 
                                 : 'bg-gray-600'
                             } ${loading ? 'opacity-50' : 'cursor-pointer hover:bg-opacity-80'}`}
-                            title={upi.isActive ? 'Click to deactivate' : 'Click to activate'}
+                            title={upi.isActive ? 'Click to deactivate' : 'Click to activate (will deactivate others)'}
                           >
                             <span
                               className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
@@ -541,32 +512,6 @@ function UpiManager() {
                             minute: '2-digit' 
                           })}
                         </p>
-                      </td>
-
-                      {/* Actions Column */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleEdit(upi)}
-                            disabled={loading}
-                            className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Edit"
-                          >
-                            <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                              <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDelete(upi.paymentSetupId)}
-                            disabled={loading}
-                            className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Delete"
-                          >
-                            <svg className="w-4 h-4" fill="none" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" stroke="currentColor">
-                              <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                            </svg>
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   ))}

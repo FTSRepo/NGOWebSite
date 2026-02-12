@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Heart,
   Users,
@@ -23,6 +23,7 @@ import {
   User,
   Mail,
   Phone,
+  AlertCircle,
 } from "lucide-react";
 
 function Donate() {
@@ -37,6 +38,13 @@ function Donate() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // UPI Configuration State - Dynamic from API
+  const [activeUPI, setActiveUPI] = useState(null);
+  const [upiLoading, setUpiLoading] = useState(true);
+  const [upiError, setUpiError] = useState(null);
+
+  const webSiteId = 1001;
+
   // User details state
   const [userDetails, setUserDetails] = useState({
     fullName: "",
@@ -49,10 +57,88 @@ function Donate() {
 
   const predefinedAmounts = [500, 1000, 2500, 5000, 10000];
 
-  // UPI Configuration
-  const upiId = "6205129152@ibl";
-  const upiName = "Nikhil Kumar";
-  const webSiteId = 1001; // You can configure this based on your website
+  // Fetch Active UPI on component mount
+  useEffect(() => {
+    fetchActiveUPI();
+  }, []);
+
+  // Fetch active UPI from API
+  const fetchActiveUPI = async () => {
+    setUpiLoading(true);
+    setUpiError(null);
+
+    try {
+      const response = await fetch(
+        `https://fileupload.friensys.com/api/Common/get-payment-setup?WebsiteId=${webSiteId}`,
+        {
+          headers: {
+            accept: "*/*",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch UPI configuration");
+      }
+
+      const result = await response.json();
+
+      if (result.statusCode === 200 && result.data && result.data.length > 0) {
+        // Filter active UPIs
+        const activeUPIs = result.data.filter((upi) => upi.isActive === true);
+
+        if (activeUPIs.length === 0) {
+          // No active UPI found, use fallback or show error
+          setUpiError("No active payment method configured. Please contact support.");
+          console.warn("No active UPI found");
+          return;
+        }
+
+        // If multiple active UPIs, sort by tranDate descending and pick the most recent
+        const sortedActiveUPIs = activeUPIs.sort(
+          (a, b) => new Date(b.tranDate) - new Date(a.tranDate)
+        );
+
+        const selectedUPI = sortedActiveUPIs[0];
+
+        console.log("Active UPI selected:", selectedUPI);
+
+        setActiveUPI({
+          upiId: selectedUPI.upI_Id,
+          upiNumber: selectedUPI.upI_Number,
+          // Extract name from UPI ID (part before @) or use default
+          upiName: extractNameFromUPI(selectedUPI.upI_Id),
+        });
+      } else {
+        setUpiError("No payment methods available. Please contact support.");
+      }
+    } catch (error) {
+      console.error("Error fetching active UPI:", error);
+      setUpiError("Failed to load payment configuration. Please try again later.");
+    } finally {
+      setUpiLoading(false);
+    }
+  };
+
+  // Extract name from UPI ID or use default
+  const extractNameFromUPI = (upiId) => {
+    if (!upiId) return "Old Age Home";
+    
+    // Try to extract meaningful name from UPI ID
+    const parts = upiId.split("@");
+    if (parts[0]) {
+      // If it's a phone number, return default name
+      if (/^\d+$/.test(parts[0])) {
+        return "Old Age Home";
+      }
+      // Otherwise capitalize the first part
+      return parts[0]
+        .split(/[._-]/)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+    }
+    return "Old Age Home";
+  };
 
   const causes = [
     {
@@ -212,14 +298,16 @@ function Donate() {
     try {
       setIsSubmitting(true);
 
-      // Replace with your actual API endpoint
-      const response = await fetch("https://fileupload.friensys.com/api/Common/SaveDonation", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(donationData),
-      });
+      const response = await fetch(
+        "https://fileupload.friensys.com/api/Common/SaveDonation",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(donationData),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to save donation");
@@ -238,20 +326,28 @@ function Donate() {
   };
 
   const generateUPILink = () => {
+    if (!activeUPI) return "";
+    
     const amount = selectedAmount || customAmount;
     const cause = causes.find((c) => c.id === selectedCause).title;
-    return `upi://pay?pa=${upiId}&pn=${encodeURIComponent(upiName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(cause)}`;
+    return `upi://pay?pa=${activeUPI.upiId}&pn=${encodeURIComponent(
+      activeUPI.upiName
+    )}&am=${amount}&cu=INR&tn=${encodeURIComponent(cause)}`;
   };
 
   const generateQRCodeURL = () => {
     const upiLink = generateUPILink();
-    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiLink)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+      upiLink
+    )}`;
   };
 
   const copyUPIId = () => {
-    navigator.clipboard.writeText(upiId);
-    setCopiedUPI(true);
-    setTimeout(() => setCopiedUPI(false), 2000);
+    if (activeUPI) {
+      navigator.clipboard.writeText(activeUPI.upiId);
+      setCopiedUPI(true);
+      setTimeout(() => setCopiedUPI(false), 2000);
+    }
   };
 
   const handleDonate = () => {
@@ -260,6 +356,20 @@ function Donate() {
       alert("Please select or enter an amount");
       return;
     }
+
+    // Check if UPI is loaded
+    if (upiLoading) {
+      alert("Payment configuration is loading. Please wait...");
+      return;
+    }
+
+    if (upiError || !activeUPI) {
+      alert(
+        "Payment configuration not available. Please contact support or try again later."
+      );
+      return;
+    }
+
     // Show details form first
     setShowDetailsForm(true);
   };
@@ -284,7 +394,10 @@ function Donate() {
     }
 
     if (methodId === "upi") {
-      window.location.href = generateUPILink();
+      const upiLink = generateUPILink();
+      if (upiLink) {
+        window.location.href = upiLink;
+      }
     } else if (methodId === "card") {
       alert("Card payment integration will redirect to secure payment gateway");
       setTimeout(() => {
@@ -329,6 +442,28 @@ function Donate() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-amber-50">
+      {/* UPI Loading/Error Banner */}
+      {upiLoading && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] animate-slide-down">
+          <div className="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-xl flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <span className="font-semibold">Loading payment configuration...</span>
+          </div>
+        </div>
+      )}
+
+      {upiError && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] animate-slide-down max-w-md">
+          <div className="bg-red-600 text-white px-6 py-4 rounded-xl shadow-xl flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 flex-shrink-0" />
+            <div>
+              <p className="font-bold">Payment Configuration Error</p>
+              <p className="text-sm text-red-100">{upiError}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payment Success Notification */}
       {paymentSuccess && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[60] animate-slide-down">
@@ -553,11 +688,14 @@ function Donate() {
               {/* Donate Button */}
               <button
                 onClick={handleDonate}
-                className="w-full bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 text-white py-6 rounded-2xl font-black text-xl hover:shadow-2xl hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-3 group transform hover:scale-105"
+                disabled={upiLoading || !!upiError}
+                className="w-full bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 text-white py-6 rounded-2xl font-black text-xl hover:shadow-2xl hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-3 group transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Heart className="w-7 h-7 fill-white group-hover:scale-125 transition-transform" />
-                Continue to Donate
-                <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                {upiLoading ? "Loading..." : upiError ? "Payment Unavailable" : "Continue to Donate"}
+                {!upiLoading && !upiError && (
+                  <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                )}
               </button>
 
               <div className="mt-6 flex items-center justify-center gap-2 text-sm text-gray-600">
@@ -815,7 +953,7 @@ function Donate() {
       )}
 
       {/* Payment Modal */}
-      {showPaymentModal && (
+      {showPaymentModal && activeUPI && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-slide-up">
             <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-3xl flex items-center justify-between z-10">
@@ -915,7 +1053,7 @@ function Donate() {
                           <div className="flex items-center gap-2">
                             <input
                               type="text"
-                              value={upiId}
+                              value={activeUPI.upiId}
                               readOnly
                               className="flex-1 bg-gray-50 px-4 py-3 rounded-lg font-mono text-gray-900 border border-gray-300"
                             />
@@ -951,7 +1089,7 @@ function Donate() {
                             Beneficiary
                           </label>
                           <div className="font-semibold text-gray-900">
-                            {upiName}
+                            {activeUPI.upiName}
                           </div>
                         </div>
 
@@ -1016,7 +1154,7 @@ function Donate() {
                     You will be redirected to our secure payment gateway to
                     complete your donation.
                   </p>
-                  <button 
+                  <button
                     disabled={isSubmitting}
                     className="bg-gradient-to-r from-orange-600 to-red-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
